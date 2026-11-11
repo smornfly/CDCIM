@@ -1,0 +1,38 @@
+# 统一换行符：仓库内一律 LF（Windows/WSL 双端一致，避免 shell 脚本在 WSL 内报 \r 错误）
+* text=auto eol=lf
+
+# 文本类显式声明
+*.md      text eol=lf
+*.txt     text eol=lf
+*.py      text eol=lf
+*.sh      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.json    text eol=lf
+*.sql     text eol=lf
+*.ts      text eol=lf
+*.js      text eol=lf
+*.vue     text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.env*    text eol=lf
+*.toml    text eol=lf
+Dockerfile text eol=lf
+
+# Windows 专用脚本保留 CRLF
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+
+# 二进制资源
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.pdf     binary
+*.xlsx    binary
+*.docx    binary
+
+# 导出的矢量图按二进制处理，避免 diff 噪音（源文件是 Mermaid，可重生成）
+docs/assets/**/*.svg binary

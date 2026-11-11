@@ -1,0 +1,48 @@
+# ===== 运行时数据（绝不入库）=====
+data/
+deploy/data/
+logs/
+*.log
+
+# TDengine / Redpanda / PostgreSQL / Redis / Qdrant 数据目录挂载点
+deploy/volumes/
+
+# ===== 环境与密钥 =====
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ===== Node / 前端 =====
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# ===== 编辑器与系统 =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 临时与导出 =====
+tmp/
+*.tmp
+*.bak
+*.swp
+docs/assets/**/*.drawio.bak
+
+# ===== 智能体内部 =====
+.workbuddy/memory/
