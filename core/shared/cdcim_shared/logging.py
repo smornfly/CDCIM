@@ -62,7 +62,9 @@ def configure_logging(service: str, level: str = "INFO", *, json_output: bool = 
         wrapper_class=structlog.make_filtering_bound_logger(
             logging.getLevelNamesMapping()[level.upper()]
         ),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        # 必须用 stdlib LoggerFactory：处理器链里的 add_logger_name 读取
+        # logger.name，PrintLogger 没有该属性（曾在 api 启动时抛 AttributeError）。
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 

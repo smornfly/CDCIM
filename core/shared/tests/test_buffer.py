@@ -38,9 +38,11 @@ def test_high_watermark_warns_once(tmp_path: Path) -> None:
     buf = DiskBuffer(tmp_path / "q.db", quota_bytes=4096, high_watermark=0.5)
     buf.open()
     try:
+        warned = False
         for i in range(20):
             buf.enqueue(_sample(float(i)))
-        assert buf.is_high_watermark() is True
-        assert buf.should_warn() in (True, False)  # 阶梯告警只触发一次，由实现控制
+            warned = buf.should_warn() or warned
+        assert buf.stats().is_high_watermark is True
+        assert warned is True, "超过水位线后应至少触发一次阶梯告警"
     finally:
         buf.close()
