@@ -68,7 +68,9 @@ step 5 "初始化 topic 与时序库"
 printf '==> 初始化 Redpanda 主题（13 个）\n'
 docker compose exec -T broker sh -s < redpanda/bootstrap.sh
 printf '==> 初始化 TDengine 4 库与超级表\n'
-docker exec -i cdcim-tsdb taos < initdb/02-tdengine.sql
+# taos 3.3 CLI 在 stdin 非 TTY 时只打印横幅不执行 SQL，必须用 -s 显式传入。
+SQL_BODY="$(cat initdb/02-tdengine.sql)"
+docker exec cdcim-tsdb taos -s "$SQL_BODY"
 printf '==> PostgreSQL 18 张表由镜像首次启动时自动建好\n'
 
 PORT="$(grep -E '^PORT_WEB=' .env | head -1 | cut -d= -f2)"

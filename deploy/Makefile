@@ -68,7 +68,7 @@ init-topics: ## 创建 13 个 Kafka 主题（幂等）
 
 init-db: ## 初始化 TDengine 4 库 4 超级表（PG 由镜像首次启动自动执行）
 	@echo "==> 初始化 TDengine（dcim / dcim_1m / dcim_5m / dcim_1h）"
-	docker exec -i $(PROJECT)-tsdb taos < initdb/02-tdengine.sql
+	docker exec $(PROJECT)-tsdb taos -s "$$(cat initdb/02-tdengine.sql)"
 	@echo "==> PostgreSQL 18 张表：首次启动时由 initdb/01-postgres.sql 自动建好"
 	@echo "    若数据卷已存在过，需手工执行：docker exec -i $(PROJECT)-pg psql -U cdcim -d cdcim -v ON_ERROR_STOP=1 < initdb/01-postgres.sql"
 
