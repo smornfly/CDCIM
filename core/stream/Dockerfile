@@ -6,12 +6,14 @@ FROM python:3.11-slim AS builder
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# aiokafka 的 zstd 压缩依赖 zstandard；缺失时 producer 构造即 RuntimeError
 RUN pip install --prefix=/install \
         "aiokafka>=0.10" \
         "taospy>=2.7" \
         "pydantic>=2.6" \
         "pydantic-settings>=2.2" \
         "structlog>=24.1" \
+        "zstandard>=0.22" \
         "orjson>=3.9"
 
 FROM python:3.11-slim AS runtime
