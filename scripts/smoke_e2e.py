@@ -16,9 +16,12 @@ from typing import Any
 
 from _common import (
     add_common_args,
+    bearer_headers,
     die,
     get_json,
+    http_request,
     info,
+    obtain_token,
     parse_iso_ms,
     print_table,
     require_base_url,
@@ -41,7 +44,8 @@ def extract_latest(body: Any) -> dict[str, Any] | None:
     return None
 
 
-def query_latest(base_url: str, api_prefix: str, point_id: int, timeout: float) -> tuple[dict[str, Any] | None, str, float, int]:
+def query_latest(base_url: str, api_prefix: str, point_id: int, timeout: float,
+                 token: str = "") -> tuple[dict[str, Any] | None, str, float, int]:
     """按接口文档优先 /realtime/points，404 时回落单点接口。返回 (数据, 路径, 耗时ms, 状态码)。"""
     candidates = [
         (f"{api_prefix}/realtime/points", {"point_ids": str(point_id)}),
@@ -49,7 +53,7 @@ def query_latest(base_url: str, api_prefix: str, point_id: int, timeout: float) 
     ]
     last_status = 0
     for path, params in candidates:
-        result = get_json(base_url, path, timeout, params=params)
+        result = http_request(base_url, path, timeout, params=params, headers=bearer_headers(token))
         last_status = result.status
         if result.ok:
             return extract_latest(result.body), path, result.elapsed_ms, result.status
@@ -86,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_publish and not Path(args.simulator).is_file():
         die(f"找不到模拟器 {args.simulator}", "确认仓库完整，或用 --simulator 指定路径")
 
+    token = obtain_token(base_url, args.timeout)
     health = get_json(base_url, "/healthz", args.timeout)
     if health.error:
         die("服务不可达，冒烟无法开始。",
@@ -127,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     query_ms = 0.0
     found_ms = 0.0
     while True:
-        record, path, elapsed_ms, status = query_latest(base_url, args.api_prefix, args.point_id, args.timeout)
+        record, path, elapsed_ms, status = query_latest(base_url, args.api_prefix, args.point_id, args.timeout, token)
         if record is not None and values_equal(record.get("value"), args.value):
             hit_path = path
             query_ms = elapsed_ms

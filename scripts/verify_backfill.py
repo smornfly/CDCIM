@@ -21,9 +21,12 @@ from typing import Any
 
 from _common import (
     add_common_args,
+    bearer_headers,
     die,
     get_json,
+    http_request,
     info,
+    obtain_token,
     iso_from_ms,
     parse_iso_ms,
     print_table,
@@ -52,13 +55,15 @@ def load_manifest(path: Path, point_id: int) -> list[dict[str, Any]]:
 
 
 def fetch_series(base_url: str, api_prefix: str, point_id: int,
-                 start_ms: int, end_ms: int, timeout: float) -> tuple[list[dict[str, Any]], str]:
-    path = f"{api_prefix}/points/{point_id}/series"
-    result = get_json(base_url, path, timeout, params={
-        "start": iso_from_ms(start_ms - 60_000),
-        "end": iso_from_ms(end_ms + 60_000),
-        "max_points": "5000",
-    })
+                 start_ms: int, end_ms: int, timeout: float,
+                 token: str = "") -> tuple[list[dict[str, Any]], str]:
+    # 对齐 P4 已实现的 /history（/series 属 P5 接口，现返回 501）
+    path = f"{api_prefix}/points/{point_id}/history"
+    result = http_request(base_url, path, timeout, params={
+        "from": iso_from_ms(start_ms - 60_000),
+        "to": iso_from_ms(end_ms + 60_000),
+        "interval": "raw",
+    }, headers=bearer_headers(token))
     if result.error:
         return [], result.error
     if not result.ok:
@@ -66,13 +71,14 @@ def fetch_series(base_url: str, api_prefix: str, point_id: int,
     body = result.body
     if not isinstance(body, dict):
         return [], "响应不是 JSON 对象"
-    items = body.get("items")
-    route = str(body.get("route", "unknown"))
+    items = body.get("points")
+    route = "history/raw"
     return (items if isinstance(items, list) else []), route
 
 
 def wait_for_backfill(base_url: str, api_prefix: str, point_id: int,
                       expected_ms: list[int], wait_seconds: float, timeout: float,
+                      token: str = "",
                       ) -> tuple[set[int], str, int]:
     deadline = time.monotonic() + wait_seconds
     last_route = "unknown"
@@ -80,7 +86,7 @@ def wait_for_backfill(base_url: str, api_prefix: str, point_id: int,
     while True:
         attempts += 1
         items, route = fetch_series(base_url, api_prefix, point_id,
-                                    min(expected_ms), max(expected_ms), timeout)
+                                    min(expected_ms), max(expected_ms), timeout, token)
         last_route = route
         seen = {value for value in (parse_iso_ms(str(item.get("ts", ""))) for item in items)
                 if value is not None}
@@ -120,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     stats_path = Path(args.stats)
     simulation_seconds = args.duration or (args.warmup + args.drop_seconds + 60.0)
 
+    token = obtain_token(base_url, args.timeout)
     health = get_json(base_url, "/healthz", args.timeout)
     if health.error or not health.ok:
         die("服务不可达或 /healthz 不健康，补传验证无法进行。",
@@ -159,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
 
     info(f"清单口径：断链期间落盘 {len(entries)} 条，去重后 {len(expected_ms)} 个时间戳")
     seen, route, attempts = wait_for_backfill(
-        base_url, args.api_prefix, args.point_id, expected_ms, args.backfill_wait, args.timeout,
+        base_url, args.api_prefix, args.point_id, expected_ms, args.backfill_wait, args.timeout, token,
     )
 
     missing = [ts for ts in expected_ms if ts not in seen]

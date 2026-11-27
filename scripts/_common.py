@@ -155,6 +155,23 @@ def get_json(
     return http_request(base_url, path, timeout, params=params)
 
 
+def obtain_token(
+    base_url: str, timeout: float, username: str = "dev-viewer", password: str = "dev-pass"
+) -> str:
+    """P4 占位账号登录；查询接口需要 Bearer 令牌（401 是鉴权生效，不是服务故障）。"""
+    result = http_request(
+        base_url, "/api/v1/auth/login", timeout,
+        method="POST", payload={"username": username, "password": password},
+    )
+    if not result.ok or not isinstance(result.body, dict) or not result.body.get("access_token"):
+        die("登录失败，无法调用需鉴权的查询接口。", problem_hint(result))
+    return str(result.body["access_token"])
+
+
+def bearer_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
 # ------------------------------------------------------------------ 时间
 def parse_iso_ms(text: str) -> int | None:
     """ISO 8601 → epoch 毫秒；解析失败返回 None。"""
