@@ -58,7 +58,9 @@ class Settings(BaseSettings):
 
     # ---------------- 事件总线（Kafka 协议 / Redpanda） ----------------
     kafka_bootstrap_servers: str = "127.0.0.1:9092"
-    kafka_acks: str = "1"          # 原型 acks=1；生产改 all（契约 §1 原则 1）
+    # aiokafka 只接受整数 0/1/-1 或字符串 "all"；字符串 "1" 会直接抛 Invalid ACKS parameter。
+    # 生产改为 -1（等价 all）。
+    kafka_acks: int = 1
     kafka_linger_ms: int = 5
     kafka_compression: str = "zstd"
     kafka_max_message_bytes: int = 4 * 1024
