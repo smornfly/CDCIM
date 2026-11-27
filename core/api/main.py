@@ -14,9 +14,9 @@ import argparse
 import asyncio
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 # 允许以脚本方式运行（容器里没有把 core/api 装成包）。
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shared"))
@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 from cdcim_shared.config import Settings, get_settings  # noqa: E402
-from cdcim_shared.logging import get_logger  # noqa: E402
+from cdcim_shared.logging import configure_logging, get_logger  # noqa: E402
 from cdcim_shared.timeutil import utc_now  # noqa: E402
 
 from errors import ApiError, P4_NOT_IMPLEMENTED, problem_response  # noqa: E402
@@ -42,6 +42,23 @@ from security import (  # noqa: E402
 __all__ = ["app", "main"]
 
 log = get_logger("api")
+
+#: E14 数据质量码：0 good / 1 uncertain / 2 bad / 3 stale（数据字典 §5.14）。
+#: TDengine 存 tinyint，HTTP 契约要枚举字符串，映射缺一不可。
+_QUALITY_BY_CODE: Final[dict[int, str]] = {
+    0: "good",
+    1: "uncertain",
+    2: "bad",
+    3: "stale",
+}
+
+
+def _pick_value(v_double: object, v_int: object, v_bool: object) -> object:
+    """按 val_double / val_int / val_bool 优先级取非空值（0.0 也是有效值）。"""
+    for value in (v_double, v_int, v_bool):
+        if value is not None:
+            return value
+    return None
 
 
 # ------------------------------------------------------------------ 请求模型
@@ -85,6 +102,7 @@ class HistoryResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ANN001, ARG001
     settings = get_settings()
+    configure_logging("cdcim-api", settings.log_level, json_output=settings.log_json)
     assert_auth_mode_supported(settings)  # 不支持的模式必须在监听前失败
     log.info("api_started", config=settings.safe_summary())
     yield
@@ -134,7 +152,8 @@ async def validation_handler(request: Request, exc: RequestValidationError) -> J
         }
         for err in exc.errors()
     ]
-    return problem_response(ApiError("CDCIM-REQ-001", "请求参数不正确", details), "validation")
+    trace_id = getattr(request.state, "trace_id", "unknown")
+    return problem_response(ApiError("CDCIM-REQ-001", "请求参数不正确", details), trace_id)
 
 
 # ------------------------------------------------------------------ 健康检查
@@ -147,7 +166,7 @@ async def healthz() -> dict[str, str]:
 
 
 @app.get("/readyz", summary="就绪探针（检查只读查询所依赖的存储）")
-async def readyz() -> dict[str, object]:
+async def readyz() -> JSONResponse:
     settings = get_settings()
     checks: dict[str, str] = {}
     try:
@@ -161,7 +180,11 @@ async def readyz() -> dict[str, object]:
     except Exception:  # noqa: BLE001
         checks["tdengine"] = "unavailable"
     ready = all(v == "ok" for v in checks.values())
-    return {"ready": ready, "checks": checks}
+    # 不就绪必须给 503，否则接 K8s readiness 时会把依赖故障的服务当健康实例。
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={"ready": ready, "checks": checks},
+    )
 
 
 async def _check_pg(settings: Settings) -> str:
@@ -203,7 +226,9 @@ async def login(body: LoginRequest) -> LoginResponse:
     log.info("login_ok", username=user.username, role=user.role, auth_mode=settings.auth_mode)
     return LoginResponse(
         access_token=issue_placeholder_token(user),
-        expires_in=settings.auth_session_ttl_min * 60,
+        # 占位令牌的 exp 固定为 8 h（security.issue_placeholder_token）；
+        # 不要让响应声明 30 min 而令牌实际 8 h 有效。P5 换会话令牌时统一读取配置。
+        expires_in=28_800,
         role=user.role,
     )
 
@@ -221,17 +246,23 @@ async def latest(
     _user: CurrentUser = Depends(require_permission("point:read")),
 ) -> PointValue:
     """从 TDengine 子表 ``dcim.m_<point_id>`` 取最后一条。子表不存在视为 404。"""
-    if point_id <= 0:
-        raise ApiError("CDCIM-REQ-001", "point_id 必须为正整数")
     settings = get_settings()
+    # 超级表没有名为 value 的列；三类值分列存储。ORDER BY + LIMIT 1 比 last(ts, col)
+    # 更稳：后者返回二元组，多列并列时列数易错位。
     sql = (
-        f"SELECT last(ts, value), last(ts, quality) FROM {settings.tdengine_database}.m_{point_id}"
+        f"SELECT ts, val_double, val_int, val_bool, quality "
+        f"FROM {settings.tdengine_database}.m_{point_id} ORDER BY ts DESC LIMIT 1"
     )
     rows = await _td_query(settings, sql)
     if not rows or rows[0][0] is None:
         raise ApiError("CDCIM-RES-001", "测点不存在或暂无数据")
-    ts, value, _quality_ts, quality = rows[0]
-    return PointValue(point_id=point_id, ts=str(ts), value=value, quality=str(quality or "good"))
+    ts, v_double, v_int, v_bool, quality = rows[0]
+    return PointValue(
+        point_id=point_id,
+        ts=str(ts),
+        value=_pick_value(v_double, v_int, v_bool),
+        quality=_QUALITY_BY_CODE.get(int(quality or 0), "uncertain"),
+    )
 
 
 @app.get(
@@ -264,17 +295,22 @@ async def history(
             "CDCIM-REQ-006",
             f"原始粒度最多查 {settings.api_raw_max_span_days} 天，请用 interval=1m/5m/1h",
         )
+    # 4 个库是 dcim / dcim_1m / dcim_5m / dcim_1h，由数据库名加后缀推导；
+    # 不能用 tdengine_downsample_db（固定 dcim_1m）再拼后缀，那会得到不存在的 dcim_1m_5m。
     table = f"{settings.tdengine_database}.m_{point_id}" if interval == "raw" else (
-        f"{settings.tdengine_downsample_db}_{interval}.m_{point_id}"
+        f"{settings.tdengine_database}_{interval}.m_{point_id}"
     )
     rows = await _td_query(
         settings,
-        f"SELECT ts, value FROM {table} WHERE ts >= '{_iso(t0)}' AND ts <= '{_iso(t1)}' ORDER BY ts",
+        f"SELECT ts, val_double, val_int, val_bool FROM {table} "
+        f"WHERE ts >= '{_iso(t0)}' AND ts <= '{_iso(t1)}' ORDER BY ts",
     )
     return HistoryResponse(
         point_id=point_id,
         interval=interval,
-        points=[HistoryPoint(ts=str(r[0]), value=r[1]) for r in rows],
+        points=[
+            HistoryPoint(ts=str(r[0]), value=_pick_value(r[1], r[2], r[3])) for r in rows
+        ],
         truncated=len(rows) >= 5000,
     )
 
@@ -291,7 +327,12 @@ def _parse_window(start: str, end: str) -> tuple[datetime, datetime]:
 
 
 def _iso(value: datetime) -> str:
-    return value.astimezone().isoformat(timespec="milliseconds")
+    """统一按 UTC 输出时间字面量。
+
+    不能用 ``astimezone()``：它取容器本地时区（compose 设了 TZ=Asia/Shanghai），
+    会让同一个瞬间在不同宿主机上落成不同的字符串，违背 D-31「时间戳不加工」。
+    """
+    return value.astimezone(timezone.utc).isoformat(timespec="milliseconds")
 
 
 async def _td_query(settings: Settings, sql: str) -> list[tuple[Any, ...]]:
@@ -302,7 +343,7 @@ async def _td_query(settings: Settings, sql: str) -> list[tuple[Any, ...]]:
     try:
         return await asyncio.to_thread(_td_query_sync, settings, sql)
     except Exception as exc:  # noqa: BLE001 - 向上映射为 503，不泄漏驱动错误文本
-        log.error("tdengine_query_failed", error_type=type(exc).__name__, trace_id="")
+        log.error("tdengine_query_failed", error_type=type(exc).__name__)
         raise ApiError("CDCIM-SYS-002", "时序存储暂不可用") from None
 
 
