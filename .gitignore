@@ -19,6 +19,7 @@ deploy/volumes/
 deploy/mosquitto/passwd
 deploy/backup/
 deploy/archive/
+deploy/verify-*.log
 
 # ===== Python =====
 __pycache__/
