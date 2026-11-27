@@ -36,6 +36,3 @@ Dockerfile text eol=lf
 
 # 导出的矢量图按二进制处理，避免 diff 噪音（源文件是 Mermaid，可重生成）
 docs/assets/**/*.svg binary
-*.sh text eol=lf
-Makefile text eol=lf
-*.py text eol=lf
