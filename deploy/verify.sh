@@ -52,21 +52,21 @@ step 3 "启动容器"
 docker compose --env-file .env up -d
 
 step 4 "等待健康（最长 120 秒）"
-for i in $(seq 1 40); do
-  bad="$(docker compose --env-file .env ps --format '{{.Service}} {{.Status}}' | grep -Ec 'unhealthy|exited|dead' || true)"
+for i in $(seq 1 60); do
+  bad="$(docker compose --env-file .env ps --format '{{.Service}} {{.Status}}' | grep -Ec 'unhealthy|restarting|exited|dead|health: starting' || true)"
   if [ "${bad:-0}" -eq 0 ]; then break; fi
-  printf '  仍有 %s 个容器未就绪，等待 3 秒（%s/40）\n' "$bad" "$i"
+  printf '  仍有 %s 个容器未就绪，等待 3 秒（%s/60）\n' "$bad" "$i"
   sleep 3
 done
 docker compose --env-file .env ps
-if docker compose --env-file .env ps --format '{{.Status}}' | grep -Eq 'unhealthy|exited|dead'; then
+if docker compose --env-file .env ps --format '{{.Status}}' | grep -Eq 'unhealthy|restarting|exited|dead|health: starting'; then
   fail '容器未全部就绪，先看上面列表，再用 docker compose --env-file .env logs <服务名> 查日志'
 fi
 printf '[OK] 容器全部就绪\n'
 
 step 5 "初始化 topic 与时序库"
 printf '==> 初始化 Redpanda 主题（13 个）\n'
-docker compose exec -T broker sh -s < redpanda/bootstrap.sh
+docker compose exec -T -e REDPANDA_BROKERS=cdcim-broker:9092 broker sh -s < redpanda/bootstrap.sh
 printf '==> 初始化 TDengine 4 库与超级表\n'
 docker exec -i cdcim-tsdb taos < initdb/02-tdengine.sql
 printf '==> PostgreSQL 18 张表由镜像首次启动时自动建好\n'
