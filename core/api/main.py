@@ -21,7 +21,7 @@ from typing import Any, Final
 # 允许以脚本方式运行（容器里没有把 core/api 装成包）。
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shared"))
 
-from fastapi import Depends, FastAPI, Query, Request  # noqa: E402
+from fastapi import Depends, FastAPI, Path as ApiPath, Query, Request  # noqa: E402
 from fastapi.exceptions import RequestValidationError  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
@@ -242,7 +242,7 @@ async def login(body: LoginRequest) -> LoginResponse:
     summary="测点最新值",
 )
 async def latest(
-    point_id: int = Query(ge=1),
+    point_id: int = ApiPath(ge=1),
     _user: CurrentUser = Depends(require_permission("point:read")),
 ) -> PointValue:
     """从 TDengine 子表 ``dcim.m_<point_id>`` 取最后一条。子表不存在视为 404。"""
@@ -271,7 +271,7 @@ async def latest(
     summary="测点历史（原始 / 1m / 5m / 1h）",
 )
 async def history(
-    point_id: int = Query(ge=1),
+    point_id: int = ApiPath(ge=1),
     start: str = Query(alias="from", description="ISO 8601，带时区"),
     end: str = Query(alias="to", description="ISO 8601，带时区"),
     interval: str = Query(default="1m", pattern="^(raw|1m|5m|1h)$"),
