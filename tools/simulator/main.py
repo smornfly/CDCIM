@@ -178,7 +178,7 @@ class Publisher:
     def publish(self, point: Point, payload: bytes, replay: bool) -> bool:
         if self.dry_run:
             return True
-        topic = f"{self.topic_prefix}/{point.device_code}"
+        topic = f"{self.topic_prefix}/{point.device_code}/telemetry"
         info = self.client.publish(topic, payload, qos=self.qos)  # type: ignore[union-attr]
         return info.rc == 0
 
@@ -394,7 +394,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fixed-value", type=float, default=None, help="所有测点固定为该值")
     parser.add_argument("--broker", default=os.getenv("CDCIM_MQTT_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("CDCIM_MQTT_PORT", "1883")))
-    parser.add_argument("--topic-prefix", default=os.getenv("CDCIM_MQTT_TOPIC_PREFIX", "cdcim/telemetry"))
+    parser.add_argument("--topic-prefix", default=os.getenv("CDCIM_MQTT_TOPIC_PREFIX", "cdcim/site-a"),
+                        help="前缀 + /<device_code>/telemetry，须匹配采集订阅 cdcim/+/+/telemetry")
     parser.add_argument("--qos", type=int, default=1, choices=(0, 1, 2))
     parser.add_argument("--jitter", type=float, default=0.05, help="发送间隔抖动比例，默认 5%%")
     parser.add_argument("--drain-seconds", type=float, default=2.0, help="退出前等待在途消息的时间")
