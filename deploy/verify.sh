@@ -53,13 +53,13 @@ docker compose --env-file .env up -d
 
 step 4 "等待健康（最长 120 秒）"
 for i in $(seq 1 60); do
-  bad="$(docker compose --env-file .env ps --format '{{.Service}} {{.Status}}' | grep -Ec 'unhealthy|restarting|exited|dead|health: starting' || true)"
+  bad="$(docker compose --env-file .env ps --format '{{.Service}} {{.Status}}' | grep -v '^collector-init ' | grep -Ec 'unhealthy|restarting|exited|dead|health: starting' || true)"
   if [ "${bad:-0}" -eq 0 ]; then break; fi
   printf '  仍有 %s 个容器未就绪，等待 3 秒（%s/60）\n' "$bad" "$i"
   sleep 3
 done
 docker compose --env-file .env ps
-if docker compose --env-file .env ps --format '{{.Status}}' | grep -Eq 'unhealthy|restarting|exited|dead|health: starting'; then
+if docker compose --env-file .env ps --format '{{.Service}} {{.Status}}' | grep -v '^collector-init ' | grep -Eq 'unhealthy|restarting|exited|dead|health: starting'; then
   fail '容器未全部就绪，先看上面列表，再用 docker compose --env-file .env logs <服务名> 查日志'
 fi
 printf '[OK] 容器全部就绪\n'

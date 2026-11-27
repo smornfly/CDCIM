@@ -35,6 +35,16 @@ services:
   # 1. 采集网关（边端，只挂 edge-net）
   #    内存 256 MB：含 150 MB 环形队列的文件页缓存（不计入 RSS）
   # ==========================================================
+  # 一次性任务：named volume 首次创建属主为 root，需把缓冲目录交给 UID 10001。
+  # 不这么做，非 root 的 collector 会在 sqlite3.connect 时报 unable to open database file。
+  collector-init:
+    image: alpine:3.20
+    container_name: cdcim-collector-init
+    restart: "no"
+    command: sh -c "mkdir -p /queue && chown -R 10001:10001 /queue"
+    volumes:
+      - collector-queue:/queue
+
   collector:
     image: ${COLLECTOR_IMAGE:-cdcim/collector-gateway:0.1}
     build:
@@ -77,6 +87,8 @@ services:
       CDCIM_BUFFER_QUOTA_MB: ${COLLECTOR_BUFFER_QUOTA_MB:-150}
       CDCIM_BUFFER_REPLAY_RATE_PER_S: ${REPLAY_RATE_LIMIT:-1440}
     depends_on:
+      collector-init:
+        condition: service_completed_successfully
       mqtt:
         condition: service_healthy
     healthcheck:
