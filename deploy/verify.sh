@@ -29,7 +29,7 @@ if [ ! -f .env ]; then
   printf '[WARN] 已由 .env.example 生成 .env，请编辑其中的 CHANGE_ME_* 密码后重新执行本脚本。\n'
   exit 2
 fi
-if grep -q 'CHANGE_ME' .env; then
+if grep -Eq '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=.*CHANGE_ME' .env; then
   fail '.env 中仍有 CHANGE_ME_* 占位密码，请先填写真实密码'
 fi
 printf '[OK] .env 已就绪（未回显内容）\n'
