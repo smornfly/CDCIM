@@ -125,7 +125,7 @@ services:
   #    内存 1152 MB：Seastar 预占，不可压缩（组件映射表 §4 标注「否」）
   # ==========================================================
   broker:
-    image: ${BROKER_IMAGE:-redpandadata/redpanda:v24.2}
+    image: ${BROKER_IMAGE:-redpandadata/redpanda:v24.2.10}
     container_name: cdcim-broker
     restart: unless-stopped
     mem_limit: 1152m
@@ -240,6 +240,8 @@ services:
   # ==========================================================
   alarm:
     image: ${ALARM_IMAGE:-cdcim/alarm-engine:0.1}
+    # P4 无告警服务代码；不进默认启动集，P5 实现后移除该 profile
+    profiles: ["p5"]
     container_name: cdcim-alarm
     restart: unless-stopped
     mem_limit: 256m
@@ -280,7 +282,7 @@ services:
   #    4 库 4 超级表由 initdb/02-tdengine.sql 创建，首次启动预热较慢
   # ==========================================================
   tsdb:
-    image: ${TSDB_IMAGE:-tdengine/tdengine:3.3}
+    image: ${TSDB_IMAGE:-tdengine/tdengine:3.3.2.0}
     container_name: cdcim-tsdb
     restart: unless-stopped
     mem_limit: 640m
