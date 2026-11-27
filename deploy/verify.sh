@@ -76,6 +76,9 @@ printf '==> PostgreSQL 18 张表由镜像首次启动时自动建好\n'
 PORT="$(grep -E '^PORT_WEB=' .env | head -1 | cut -d= -f2)"
 PORT="${PORT:-8080}"
 export CDCIM_BASE_URL="http://127.0.0.1:${PORT}"
+# 模拟器在宿主侧运行，需从 .env 取 MQTT 凭据（不回显）
+export CDCIM_MQTT_USERNAME="$(grep -E '^MQTT_USER=' .env | head -1 | cut -d= -f2)"
+export CDCIM_MQTT_PASSWORD="$(grep -E '^MQTT_PASSWORD=' .env | head -1 | cut -d= -f2)"
 printf '访问地址：%s\n' "$CDCIM_BASE_URL"
 
 cd ..

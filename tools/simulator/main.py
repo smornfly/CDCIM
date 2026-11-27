@@ -169,6 +169,9 @@ class Publisher:
                 "或加 --dry-run 只做本机统计。"
             )
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"cdcim-sim-{uuid.uuid4().hex[:6]}")
+        # mosquitto 配了 allow_anonymous false，必须带账号密码，否则收不到成功 CONNACK。
+        if getattr(args, "username", ""):
+            client.username_pw_set(args.username, args.password or None)
         client.reconnect_delay_set(min_delay=1, max_delay=5)
         client.connect(args.broker, args.port, keepalive=30)
         client.loop_start()
@@ -407,6 +410,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fixed-value", type=float, default=None, help="所有测点固定为该值")
     parser.add_argument("--broker", default=os.getenv("CDCIM_MQTT_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("CDCIM_MQTT_PORT", "1883")))
+    parser.add_argument("--username", default=os.getenv("CDCIM_MQTT_USERNAME", ""),
+                        help="MQTT 账号，默认取 CDCIM_MQTT_USERNAME")
+    parser.add_argument("--password", default=os.getenv("CDCIM_MQTT_PASSWORD", ""),
+                        help="MQTT 密码，默认取 CDCIM_MQTT_PASSWORD；不回显")
     parser.add_argument("--topic-prefix", default=os.getenv("CDCIM_MQTT_TOPIC_PREFIX", "cdcim/site-a"),
                         help="前缀 + /<device_code>/telemetry，须匹配采集订阅 cdcim/+/+/telemetry")
     parser.add_argument("--qos", type=int, default=1, choices=(0, 1, 2))
