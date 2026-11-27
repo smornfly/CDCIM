@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode in ("all", "http") and selected("api"):
         results.append(check_http(base_url, args.timeout, "api-service", "/healthz"))
     if args.mode in ("all", "http") and selected("web"):
-        results.append(check_http(base_url, args.timeout, "反向代理", "/"))
+        results.append(check_http(base_url, args.timeout, "反向代理", "/healthz"))
 
     if args.mode == "tcp":
         warn("仅做 TCP 探测时不校验 API 语义。",
