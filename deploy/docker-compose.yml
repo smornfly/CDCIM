@@ -302,13 +302,15 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       TAOS_FIRST_EP: cdcim-tsdb:6030
+      # TDengine 容器内必须显式声明 FQDN，否则客户端解析到容器 ID 会连接失败（健康检查超时）
+      TAOS_FQDN: cdcim-tsdb
     healthcheck:
       <<: *health-defaults
       # 首次启动需初始化数据目录，start_period 放宽到 90 s
       interval: 10s
       start_period: 90s
       retries: 10
-      test: ["CMD-SHELL", "taos -h 127.0.0.1 -s 'SHOW DATABASES;' > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "taos -h cdcim-tsdb -s 'SHOW DATABASES;' > /dev/null 2>&1"]
     logging: *default-logging
 
   # ==========================================================
