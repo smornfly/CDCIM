@@ -16,8 +16,8 @@ step() { printf '\n===== %s =====\n' "$1"; }
 fail() { printf '[FAIL] %s\n' "$1" >&2; exit 1; }
 
 step 0 "环境检查"
-for cmd in docker make python3; do
-  command -v "$cmd" >/dev/null 2>&1 || fail "缺少 $cmd，请先安装（Ubuntu: apt install make python3；Docker 参考官方文档）"
+for cmd in docker python3; do
+  command -v "$cmd" >/dev/null 2>&1 || fail "缺少 $cmd，请先安装（python3：apt install python3；Docker 参考官方文档）"
 done
 docker info >/dev/null 2>&1 || fail "Docker daemon 未运行：sudo service docker start 或打开 Docker Desktop 集成"
 docker compose version || fail "需要 Docker Compose v2（docker compose，不是 docker-compose）"
@@ -35,12 +35,21 @@ fi
 printf '[OK] .env 已就绪（未回显内容）\n'
 
 step 2 "构建与配置校验"
-make init-mqtt
-make build
-make config
+# 以下内联 Makefile 的目标，使本脚本在没有 make 的最小 Ubuntu 上也能跑。
+if [ ! -f mosquitto/passwd ]; then
+  MQTT_USER="$(grep -E '^MQTT_USER=' .env | head -1 | cut -d= -f2)"
+  MQTT_PASSWORD="$(grep -E '^MQTT_PASSWORD=' .env | head -1 | cut -d= -f2)"
+  printf '==> 生成 mosquitto/passwd（用户 %s）\n' "$MQTT_USER"
+  docker run --rm -v "$(pwd)/mosquitto:/mosquitto/config" eclipse-mosquitto:2.0 \
+    mosquitto_passwd -b -c /mosquitto/config/passwd "$MQTT_USER" "$MQTT_PASSWORD"
+else
+  printf '==> mosquitto/passwd 已存在，跳过\n'
+fi
+docker compose build collector stream api
+docker compose --env-file .env config -q || fail 'compose 配置校验失败'
 
 step 3 "启动容器"
-make up
+docker compose --env-file .env up -d
 
 step 4 "等待健康（最长 120 秒）"
 for i in $(seq 1 40); do
@@ -51,13 +60,16 @@ for i in $(seq 1 40); do
 done
 docker compose --env-file .env ps
 if docker compose --env-file .env ps --format '{{.Status}}' | grep -Eq 'unhealthy|exited|dead'; then
-  fail '容器未全部就绪，先看上面列表，再用 make logs <服务名> 查日志'
+  fail '容器未全部就绪，先看上面列表，再用 docker compose --env-file .env logs <服务名> 查日志'
 fi
 printf '[OK] 容器全部就绪\n'
 
 step 5 "初始化 topic 与时序库"
-make init-topics
-make init-db
+printf '==> 初始化 Redpanda 主题（13 个）\n'
+docker compose exec -T broker sh -s < redpanda/bootstrap.sh
+printf '==> 初始化 TDengine 4 库与超级表\n'
+docker exec -i cdcim-tsdb taos < initdb/02-tdengine.sql
+printf '==> PostgreSQL 18 张表由镜像首次启动时自动建好\n'
 
 PORT="$(grep -E '^PORT_WEB=' .env | head -1 | cut -d= -f2)"
 PORT="${PORT:-8080}"
