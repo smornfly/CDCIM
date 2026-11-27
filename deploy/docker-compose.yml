@@ -60,7 +60,8 @@ services:
           cpus: "0.8"
           memory: 256M
     networks:
-      - edge-net
+      - edge-net   # 接 Mosquitto
+      - core-net   # 发布到 Redpanda（broker 只在 core-net，缺这段会 Unable to bootstrap）
     ports:
       # 健康检查与 /metrics，仅回环
       - "127.0.0.1:${PORT_COLLECTOR:-8001}:8001"
