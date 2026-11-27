@@ -180,7 +180,10 @@ class Publisher:
             return True
         topic = f"{self.topic_prefix}/{point.device_code}/telemetry"
         info = self.client.publish(topic, payload, qos=self.qos)  # type: ignore[union-attr]
-        return info.rc == 0
+        # rc=0 只表示进入本地发送队列；QoS1 必须等 PUBACK，否则紧随其后的
+        # disconnect() 会把尚未送达的消息丢掉（冒烟时表现为 received 恒为 0）。
+        info.wait_for_publish(timeout=5.0)
+        return info.is_published()
 
     def close(self) -> None:
         if self.client is not None:
