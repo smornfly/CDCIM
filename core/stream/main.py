@@ -46,6 +46,7 @@ from taosrest import connect as taos_connect
 
 from cdcim_shared.config import Settings, get_settings
 from cdcim_shared.contracts import TelemetrySample
+from cdcim_shared.health import serve_with_health
 from cdcim_shared.logging import configure_logging, get_logger, new_trace_id, trace_scope
 from cdcim_shared.timeutil import to_iso_ms, to_millis, utc_now
 from cdcim_shared.topics import ConsumerGroup, EventType, Topic
@@ -442,7 +443,7 @@ def main() -> int:
 
     with trace_scope(new_trace_id()):
         worker = StreamWorker(settings, TDengineWriter(settings))
-        return asyncio.run(worker.run(once=args.once, once_timeout_s=args.timeout))
+        return asyncio.run(serve_with_health(worker.run(once=args.once, once_timeout_s=args.timeout), port=None if args.once else 8002))
 
 
 if __name__ == "__main__":

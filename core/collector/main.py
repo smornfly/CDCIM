@@ -41,6 +41,7 @@ from aiokafka import AIOKafkaProducer
 from buffer import DiskBuffer, EnqueueResult
 from cdcim_shared.config import Settings, get_settings
 from cdcim_shared.contracts import TelemetrySample
+from cdcim_shared.health import serve_with_health
 from cdcim_shared.logging import configure_logging, get_logger, new_trace_id, trace_scope
 from cdcim_shared.timeutil import normalize_ms, utc_now
 from cdcim_shared.topics import Topic
@@ -457,7 +458,7 @@ def main() -> int:
         )
         buffer.open()
         try:
-            return asyncio.run(Collector(settings, buffer).run(once=args.once, once_timeout_s=args.timeout))
+            return asyncio.run(serve_with_health(Collector(settings, buffer).run(once=args.once, once_timeout_s=args.timeout), port=None if args.once else 8001))
         finally:
             buffer.close()
 

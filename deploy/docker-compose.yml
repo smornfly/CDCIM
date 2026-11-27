@@ -37,6 +37,9 @@ services:
   # ==========================================================
   collector:
     image: ${COLLECTOR_IMAGE:-cdcim/collector-gateway:0.1}
+    build:
+      context: ..
+      dockerfile: core/collector/Dockerfile
     container_name: cdcim-collector
     restart: unless-stopped
     mem_limit: 256m
@@ -63,6 +66,16 @@ services:
       SAMPLE_FAST_S: ${SAMPLE_FAST_S:-5}
       SAMPLE_SLOW_S: ${SAMPLE_SLOW_S:-30}
       REPLAY_RATE_LIMIT: ${REPLAY_RATE_LIMIT:-1440}
+      CDCIM_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CDCIM_MQTT_HOST: cdcim-mqtt
+      CDCIM_MQTT_PORT: 1883
+      CDCIM_MQTT_USERNAME: ${MQTT_USER:-cdcim}
+      CDCIM_MQTT_PASSWORD: ${MQTT_PASSWORD}
+      CDCIM_MQTT_TOPIC_PATTERN: ${MQTT_TOPIC_PATTERN:-cdcim/+/+/telemetry}
+      CDCIM_KAFKA_BOOTSTRAP_SERVERS: cdcim-broker:9092
+      CDCIM_BUFFER_PATH: /var/lib/collector/queue/collector-buffer.db
+      CDCIM_BUFFER_QUOTA_MB: ${COLLECTOR_BUFFER_QUOTA_MB:-150}
+      CDCIM_BUFFER_REPLAY_RATE_PER_S: ${REPLAY_RATE_LIMIT:-1440}
     depends_on:
       mqtt:
         condition: service_healthy
@@ -165,6 +178,9 @@ services:
   # ==========================================================
   stream:
     image: ${STREAM_IMAGE:-cdcim/stream-compute:0.1}
+    build:
+      context: ..
+      dockerfile: core/stream/Dockerfile
     container_name: cdcim-stream
     restart: unless-stopped
     mem_limit: 384m
@@ -194,6 +210,18 @@ services:
       WATERMARK_LAG_S: ${WATERMARK_LAG_S:-60}
       BATCH_SIZE: ${WRITE_BATCH_SIZE:-500}
       BATCH_INTERVAL_MS: ${WRITE_BATCH_INTERVAL_MS:-200}
+      CDCIM_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CDCIM_KAFKA_BOOTSTRAP_SERVERS: cdcim-broker:9092
+      CDCIM_TDENGINE_HOST: cdcim-tsdb
+      CDCIM_TDENGINE_REST_PORT: 6041
+      CDCIM_TDENGINE_USER: ${TDENGINE_USER:-root}
+      CDCIM_TDENGINE_PASSWORD: ${TDENGINE_PASSWORD}
+      CDCIM_TDENGINE_DATABASE: dcim
+      CDCIM_REDIS_URL: redis://:${REDIS_PASSWORD}@cdcim-cache:6379/0
+      CDCIM_WINDOW_SIZE_S: ${WINDOW_SIZE_S:-60}
+      CDCIM_WATERMARK_DELAY_S: ${WATERMARK_LAG_S:-60}
+      CDCIM_WRITE_BATCH_MAX_ROWS: ${WRITE_BATCH_SIZE:-500}
+      CDCIM_WRITE_BATCH_MAX_DELAY_MS: ${WRITE_BATCH_INTERVAL_MS:-200}
     depends_on:
       broker:
         condition: service_healthy
@@ -451,6 +479,9 @@ services:
   # ==========================================================
   api:
     image: ${API_IMAGE:-cdcim/api-service:0.1}
+    build:
+      context: ..
+      dockerfile: core/api/Dockerfile
     container_name: cdcim-api
     restart: unless-stopped
     mem_limit: 224m
@@ -477,6 +508,18 @@ services:
       PG_POOL_SIZE: ${PG_POOL_SIZE:-20}
       QUERY_CACHE_TTL_S: ${QUERY_CACHE_TTL_S:-60}
       JWT_TTL_S: ${JWT_TTL_S:-1800}
+      CDCIM_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CDCIM_PG_HOST: cdcim-pg
+      CDCIM_PG_PORT: 5432
+      CDCIM_PG_DATABASE: ${PG_DB:-cdcim}
+      CDCIM_PG_USER: ${PG_USER:-cdcim}
+      CDCIM_PG_PASSWORD: ${PG_PASSWORD}
+      CDCIM_TDENGINE_HOST: cdcim-tsdb
+      CDCIM_TDENGINE_REST_PORT: 6041
+      CDCIM_TDENGINE_USER: ${TDENGINE_USER:-root}
+      CDCIM_TDENGINE_PASSWORD: ${TDENGINE_PASSWORD}
+      CDCIM_REDIS_URL: redis://:${REDIS_PASSWORD}@cdcim-cache:6379/0
+      CDCIM_AUTH_MODE: placeholder
     depends_on:
       pg:
         condition: service_healthy
@@ -510,6 +553,8 @@ services:
       - "0.0.0.0:${PORT_WEB:-8080}:80"
     volumes:
       - nginx-cache:/var/cache/nginx
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../web/dist:/usr/share/nginx/html:ro
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       API_UPSTREAM: cdcim-api:8000

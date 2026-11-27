@@ -43,6 +43,9 @@ logs: ## 跟踪全部日志（最近 100 行）
 logs-db: ## 只跟踪数据区日志（pg / tsdb / cache）
 	$(COMPOSE) --env-file $(ENV_FILE) logs -f --tail=100 pg tsdb cache
 
+build: ## 构建三个业务镜像（collector / stream / api）
+	$(COMPOSE) build collector stream api
+
 config: ## 校验 compose 语法与环境变量插值（不启动）
 	$(COMPOSE) --env-file $(ENV_FILE) config -q && echo "compose 配置合法"
 
