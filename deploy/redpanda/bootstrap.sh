@@ -12,7 +12,13 @@
 # ============================================================
 set -eu
 
-BROKERS="${REDPANDA_BROKERS:-127.0.0.1:9092}"
+# 容器内执行时 rpk 默认就能发现本机 broker（compose 健康检查也是这么做的）；
+# 只有从宿主机执行才需要显式给 REDPANDA_BROKERS。
+if [ -n "${REDPANDA_BROKERS:-}" ]; then
+    RPK_BROKER_ARGS="--brokers ${REDPANDA_BROKERS}"
+else
+    RPK_BROKER_ARGS=""
+fi
 RPK="${RPK_BIN:-rpk}"
 
 log() {
@@ -23,8 +29,8 @@ log() {
 # 最多等 120 s（12 次 × 10 s）。首次启动需建数据目录与元数据，40~60 s 属正常。
 i=0
 while [ "$i" -lt 12 ]; do
-    if "$RPK" cluster health --brokers "$BROKERS" >/dev/null 2>&1; then
-        log "broker 就绪：$BROKERS"
+    if "$RPK" cluster health $RPK_BROKER_ARGS 2>/dev/null | grep -q "Healthy:.*true"; then
+        log "broker 就绪：${REDPANDA_BROKERS:-容器内本机}"
         break
     fi
     i=$((i + 1))
@@ -39,7 +45,7 @@ fi
 
 # ---------- 2. 取现有主题清单 ----------
 # rpk topic list 默认输出三列：NAME  PARTITIONS  REPLICAS
-LIST="$("$RPK" topic list --brokers "$BROKERS")"
+LIST="$("$RPK" topic list $RPK_BROKER_ARGS)"
 
 partitions_of() {
     echo "$LIST" | awk -v n="$1" '$1 == n {print $2; exit}'
@@ -57,7 +63,6 @@ while IFS='|' read -r name parts retention_ms note; do
 
     log "创建：$name  分区=$parts  保留=${retention_ms}ms  # $note"
     if ! "$RPK" topic create "$name" \
-        --brokers "$BROKERS" \
         --partitions "$parts" \
         --replicas 1 \
         -c retention.ms="$retention_ms" \
@@ -82,7 +87,7 @@ dlq.default|1|2592000000|死信统一收口 30d
 TOPICS
 
 # ---------- 4. 核对（重新取清单，包含新建的） ----------
-LIST="$("$RPK" topic list --brokers "$BROKERS")"
+LIST="$("$RPK" topic list $RPK_BROKER_ARGS)"
 FAIL=0
 
 while IFS='|' read -r name parts retention_ms note; do
