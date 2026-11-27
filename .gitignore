@@ -14,9 +14,18 @@ deploy/volumes/
 *.key
 *.pem
 
+# ===== 部署运行期文件（P4 落地）=====
+# mosquitto 口令文件含 PBKDF2 哈希，由 make init-mqtt 生成，不入库
+deploy/mosquitto/passwd
+deploy/backup/
+deploy/archive/
+
 # ===== Python =====
 __pycache__/
 *.py[cod]
+
+# ===== P4 模拟器本地冒烟产物 =====
+.simulator/
 .venv/
 venv/
 .pytest_cache/

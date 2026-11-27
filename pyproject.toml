@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cdcim"
+version = "0.1.0"
+description = "CDCIM 动环智能监控平台 —— P4 核心服务骨架"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Proprietary" }
+
+# 只声明直接依赖；全量钉版本由 P5 生成 requirements.lock（编码规范 §2.1）
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "aiokafka>=0.10",
+    "paho-mqtt>=2.0",
+    "taospy>=2.7",
+    "asyncpg>=0.29",
+    "redis>=5.0",
+    "orjson>=3.9",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.9",
+]
+
+# core/shared 是可被三个服务共同 import 的公共库，其余目录是可执行的入口脚本（非包）。
+[tool.setuptools]
+package-dir = { "" = "core/shared" }
+packages = ["cdcim_shared"]
+
+[tool.pytest.ini_options]
+# 让 pytest 直接找到 cdcim_shared 与 stream/window.py，无需先 pip install（本地冒烟用）
+pythonpath = ["core/shared", "core/stream"]
+testpaths = ["core/shared/tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["core"]
+
+[tool.ruff.lint]
+# 与《13-编码规范》§2.2 / §2.3 / §7 的 A 级规则对齐
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes（F403 禁止 import *）
+    "I",        # isort
+    "N",        # pep8-naming（PY-01）
+    "UP",       # pyupgrade
+    "B",        # bugbear（B006 可变默认参数、B008）
+    "BLE",      # blind-except（B-02）
+    "S",        # bandit（S307 eval/exec）
+    "T20",      # print（B-01）
+    "ASYNC",    # flake8-async（B-05）
+    "RUF",
+]
+ignore = [
+    "S101",     # 测试与骨架中的 assert
+    "B008",     # FastAPI 的 Depends/Query 必须写在默认参数位
+]
+
+[tool.ruff.lint.per-file-ignores]
+"core/*/main.py" = ["E402"]          # 入口脚本先修 PYTHONPATH 再 import，顺序必要
+"core/shared/tests/*" = ["S101", "ANN001"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+disallow_untyped_defs = true          # PY-03：跨包可见函数必须写类型
+disallow_any_generics = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+strict_equality = true
+# 第三方无 stub 的包显式豁免，避免为了消错而写 Any 扩散
+ignore_missing_imports = true
+exclude = ["core/shared/tests/"]
+
+[[tool.mypy.overrides]]
+module = ["paho.mqtt.*", "taosrest.*", "taos.*", "aiokafka.*"]
+ignore_missing_imports = true
