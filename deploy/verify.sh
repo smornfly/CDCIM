@@ -81,7 +81,7 @@ printf '访问地址：%s\n' "$CDCIM_BASE_URL"
 cd ..
 step 6 "健康与冒烟"
 python3 scripts/check_stack.py --mode all
-python3 scripts/smoke_e2e.py --point-id 7001
+python3 scripts/smoke_e2e.py --point-id 1001   # 模拟器生成 1001~3000；7001 只出现在 DDL 示例里
 
 if [ "$MODE" = "full" ]; then
   step 7 "断网补传（断链 ${DROP_SECONDS} 秒）"
