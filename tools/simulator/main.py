@@ -172,6 +172,13 @@ class Publisher:
         client.reconnect_delay_set(min_delay=1, max_delay=5)
         client.connect(args.broker, args.port, keepalive=30)
         client.loop_start()
+        # connect() 返回不代表 CONNACK 已到；未进入 connected 时 publish/wait 会失败。
+        for _ in range(50):
+            if client.is_connected():
+                break
+            time.sleep(0.1)
+        else:
+            raise SystemExit("MQTT 连接超时：broker 可达但未收到 CONNACK")
         self.client = client
         self.qos = args.qos
 
@@ -182,7 +189,10 @@ class Publisher:
         info = self.client.publish(topic, payload, qos=self.qos)  # type: ignore[union-attr]
         # rc=0 只表示进入本地发送队列；QoS1 必须等 PUBACK，否则紧随其后的
         # disconnect() 会把尚未送达的消息丢掉（冒烟时表现为 received 恒为 0）。
-        info.wait_for_publish(timeout=5.0)
+        try:
+            info.wait_for_publish(timeout=5.0)
+        except RuntimeError:
+            return False
         return info.is_published()
 
     def close(self) -> None:
