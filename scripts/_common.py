@@ -1,7 +1,7 @@
 """验证脚本共用工具：参数、HTTP 调用、表格输出。
 
-只依赖标准库；`requests` 在真正发起 HTTP 时才导入，因此 `--help`
-在未安装依赖的环境里也能正常使用。脚本内出现 `os.getenv` 仅用于
+仅依赖 Python 标准库（`urllib.request`），无需 pip 安装 requests；
+因此在最小 Ubuntu 环境里也能直接跑。脚本内出现 `os.getenv` 仅用于
 读取验证脚本自身的运行参数（`CDCIM_BASE_URL`），不涉及业务配置。
 """
 
@@ -16,6 +16,9 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Sequence
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 BASE_URL_ENV = "CDCIM_BASE_URL"
 MQTT_HOST_ENV = "CDCIM_MQTT_HOST"
@@ -84,17 +87,6 @@ class HttpResult:
         return self.error == "" and 200 <= self.status < 300
 
 
-def import_requests():
-    try:
-        import requests  # noqa: PLC0415 - 延迟导入，保证 --help 可用
-    except ImportError:
-        die(
-            "缺少 requests 依赖。",
-            "pip install requests（本脚本要求 Python 标准库 + requests）",
-        )
-    return requests
-
-
 def http_request(
     base_url: str,
     path: str,
@@ -104,23 +96,32 @@ def http_request(
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
 ) -> HttpResult:
-    requests = import_requests()
     url = f"{base_url}{path}"
+    if params:
+        url += ("&" if "?" in url else "?") + urlencode(params)
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = dict(headers or {})
+    if data is not None:
+        headers.setdefault("Content-Type", "application/json")
+    request = Request(url, data=data, headers=headers, method=method)
+
     started = time.perf_counter()
     try:
-        response = requests.request(
-            method, url, params=params, json=payload,
-            timeout=timeout, headers=headers or {},
-        )
-    except requests.RequestException as exc:
+        with urlopen(request, timeout=timeout) as response:  # noqa: S310 - 地址由 --base-url 显式给出
+            status = response.status
+            raw = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        status = exc.code
+        raw = exc.read().decode("utf-8", errors="replace")
+    except (URLError, TimeoutError, OSError) as exc:
         elapsed = (time.perf_counter() - started) * 1000
         return HttpResult(0, None, elapsed, f"{type(exc).__name__}: {exc}")
     elapsed = (time.perf_counter() - started) * 1000
     try:
-        body = response.json()
+        body = json.loads(raw)
     except ValueError:
-        body = response.text[:500]
-    return HttpResult(response.status_code, body, elapsed)
+        body = raw[:500]
+    return HttpResult(status, body, elapsed)
 
 
 def problem_hint(result: HttpResult) -> str:

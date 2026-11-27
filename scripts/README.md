@@ -1,10 +1,10 @@
 # 验证脚本（CDCIM-P4-TEST-02 / 03 / 04）
 
-三个脚本只依赖 Python 标准库 + `requests`，全部支持 `--base-url` 与 `--timeout`，
+三个脚本只依赖 Python 标准库 + `Python 标准库 urllib`，全部支持 `--base-url` 与 `--timeout`，
 失败时打印 `[FAIL]` 与可操作的 `[HINT]`。
 
 ```bash
-pip install requests
+无需额外依赖
 export CDCIM_BASE_URL=http://127.0.0.1:8080      # 也可逐条用 --base-url 传入
 ```
 
