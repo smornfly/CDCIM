@@ -580,7 +580,7 @@ services:
     healthcheck:
       <<: *health-defaults
       # 静态站点与反代配置（nginx.conf）由 P4 构建产出，本批只校验 80 端口可服务
-      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:80/"]
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:80/healthz"]
     logging: *default-logging
 
   # ==========================================================
